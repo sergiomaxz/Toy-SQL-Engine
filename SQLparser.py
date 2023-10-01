@@ -1,137 +1,90 @@
 import lexer
-import copy
-from additional_functions import consume
-# Define regular expressions and lexer (as shown in your previous question)
+
+P_OPEN = '('
+P_CLOSE = ')'
 
 
-def consume_whitespaces(tlist):
-    result = []
-    for pos, token in tlist:
-        if token.strip() == '':
-            continue
-        result.append(token)
-    return result
+class Parser:
+    def __init__(self):
+        self._tokens = None
+        self._current_token = None
 
+    def eat(self):
+        self._current_token = next(self._tokens, lexer.Token(None, 'EOF'))
 
-def group_create(tlist):
-    result = []
-    tmp_list = []
-    for pos, token in tlist:
-        result.append(token)
-        if token.upper() == 'CREATE':
-            for pos, token in tlist:
-                if token.upper() == 'INDEXED':
-                    tmp_list.append(' ')
+    def factor(self):
+        token = self._current_token
+        if (token.ttype, token.value) == (lexer.PARENTHESES, P_OPEN):
+            result = [token.value]
+            self.eat()
+            result.extend(self.group_general())
+            if (self._current_token.ttype, self._current_token.value) == (lexer.PARENTHESES, P_CLOSE):
+                result.append(self._current_token.value)
+                self.eat()
+            return result
+        else:
+            self.eat()
+            return token
 
-                elif tmp_list and tmp_list[-1] not in ',()' and token not in ',)' \
-                        and token.upper() != 'INDEXED':
-                    result.append(''.join(tmp_list))
-                    tmp_list = []
+    def term(self) -> list:
+        result = []
+        tmp_token = self.factor()
 
-                elif token == ')':
-                    tmp_list.append(token)
-                    result.append(''.join(tmp_list))
-                    break
+        result.append(tmp_token.value) if isinstance(tmp_token, lexer.Token) else result.append(tmp_token)
 
-                tmp_list.append(token)
-    return result
-
-
-def group_insert(tlist):
-    pass
-
-
-def group_select(tlist):
-    result = []
-    for pos, token in tlist:
-        result.append(token)
-        if token.upper() == 'SELECT':
-            united_list = []
-            for pos, token in tlist:
-                if token.upper() == 'FROM':
-                    result.append(','.join(united_list))
-                    result.append(token)
-                    break
-
-                if token.strip() == '' or token == ',':
-                    continue
+        if isinstance(tmp_token, list) or tmp_token.ttype in (lexer.IDENTIFIER, lexer.QUOTES):
+            while self._current_token.ttype in (lexer.WHITESPACE, lexer.PUNCTUATION, lexer.OPERATOR):
+                if self._current_token.ttype in (lexer.OPERATOR, lexer.PUNCTUATION):
+                    result.append(self._current_token.value)
+                    self.eat()
+                if self._current_token.ttype == lexer.WHITESPACE:
+                    self.eat()
+                tmp_token = self.factor()
+                if isinstance(tmp_token, lexer.Token):
+                    result.append(tmp_token.value)
+                    if tmp_token.ttype == lexer.KEYWORD:
+                        break
                 else:
-                    united_list.append(token)
-    return result
+                    result.append(tmp_token)
 
+        return result
 
-def group_where(tlist):
-    result = []
-    for pos, token in tlist:
-        result.append(token)
-        if token.upper() == 'WHERE':
-            united_list = []
-            for pos, token in tlist:
-                if token.upper() in ['=', '<', 'OR', 'AND']:
-                    united_list.extend([' ', token, ' '])
-                else:
-                    united_list.append(token)
-            result.append(united_list)
-    return result
+    def group_general(self) -> list:
+        if self._current_token.ttype == lexer.WHITESPACE:
+            self.eat()
+        result = []
+        result.extend(self.term())
 
+        while self._current_token.ttype == lexer.WHITESPACE:
+            self.eat()
+            result.extend(self.term())
 
-# grouping all categories
-def grouping(tokens):
-    grouped_tokens = []
-    for func in [consume_whitespaces, group_create, group_select, group_where]:
-        iterable = enumerate(tokens)
-        tokens = func(iterable)
+        return result
 
-    for pos, token in iterable:
-        if token.strip() == '':
-            continue
+    def group_where(self):
+        result = []
 
-        grouped_tokens.append(token)
-        if token.upper() == 'WHERE':
-            united_list = []
-            for pos, token in iterable:
-                if token.strip() == '':
-                    continue
+        if type(self._tokens) is list:
+            self._tokens = iter(self._tokens)
 
-                united_list.append(token)
-            grouped_tokens.append(united_list)
+        for gtoken in self._tokens:
+            result.append(gtoken)
+            if type(gtoken) is str and gtoken.upper() == "WHERE":
+                tmp_group = []
+                for el in self._tokens:
+                    tmp_group.append(el)
+                result.append(tmp_group)
 
-    # select_clause = parse_select_clause(tokens)
-    # from_clause = parse_from_clause(tokens)
-    # where_clause = parse_where_clause(tokens)
-    return tokens
+        return result
 
+    def group(self):
+        for func in [self.group_general, self.group_where]:
+            self._tokens = func()
+        return self._tokens
 
-def parse_select_clause(tokens):
-    if tokens[0][0].upper() == 'SELECT':
-        tokens.pop(0)  # Consume the 'SELECT' token
-        select_items = []
-        while tokens[0][0].upper() != 'FROM':
-            select_items.append(tokens.pop(0)[0])
-        return select_items
-    else:
-        return []
-
-
-def parse_from_clause(tokens):
-    if tokens[0][0].upper == 'FROM':
-        tokens.pop(0)  # Consume the 'FROM' token
-        return tokens.pop(0)[0]  # Assume a single table name for simplicity
-    else:
-        return None
-
-
-def parse_where_clause(tokens):
-    if tokens[0][0].upper() == 'WHERE':
-        tokens.pop(0)  # Consume the 'WHERE' token
-        conditions = []
-        while tokens[0][0] != 'ORDER BY' if 'ORDER BY' in [t[0] for t in tokens] else True:
-            conditions.append(tokens.pop(0)[0])
-        return conditions
-    else:
-        return []
-
-def parse(sql_statement):
-    tokens = lexer.tokenize_sql(sql_statement)
-    parsed_query = grouping(tokens)
-    return parsed_query
+    def parse(self, sql_statement: str) -> list:
+        tokens_stream = lexer.tokenize_sql(sql_statement)
+        self._tokens = tokens_stream
+        self._current_token = next(self._tokens)
+        parsed_query = self.group()
+        return parsed_query

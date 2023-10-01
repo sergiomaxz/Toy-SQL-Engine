@@ -1,34 +1,33 @@
 import re
 import os
-import sqlparse
-# import FlorianDB
-import SQLparser
+import FlorianDB
+from SQLparser import Parser
 
 
-def improvedInput():
-    packed_input = []
+def main():
     while True:
-        if packed_input == []:
-            raw_input = str(input('>>> '))
-        else:
-            raw_input = str(input('...    '))
-        # raw_input = re.sub(" +", " ", raw_input)
+        packed_input = []
+        while True:
+            if not packed_input:
+                try:
+                    raw_input = str(input('>>> '))
+                except EOFError:
+                    break
+            else:
+                raw_input = str(input('...    '))
 
-        if ';' in raw_input:
-            raw_input = raw_input[:raw_input.index(';')]
+            if ';' in raw_input:
+                raw_input = raw_input[:raw_input.index(';')]
+                packed_input.append(raw_input)
+                break
+
             packed_input.append(raw_input)
-            break
 
-        packed_input.append(raw_input)
-
-    print(packed_input)
-    packed_input = ' '.join(packed_input)
-    # parse = sqlparse.parse(packed_input)[0]
-    parse = SQLparser.parse(packed_input)
-    print(parse)
-    for p in parse:
-        print(p)
+        packed_input = ' '.join(packed_input)
+        parse = Parser().parse(packed_input)
+        for el in parse:
+            print(el)
 
 
 if __name__ == '__main__':
-    improvedInput()
+    main()
