@@ -32,7 +32,7 @@ class Parser:
 
         result.append(tmp_token.value) if isinstance(tmp_token, lexer.Token) else result.append(tmp_token)
 
-        if isinstance(tmp_token, list) or tmp_token.ttype in (lexer.IDENTIFIER, lexer.QUOTES):
+        if isinstance(tmp_token, list) or tmp_token.ttype in (lexer.IDENTIFIER, lexer.QUOTES, lexer.NUMBER):
             while self._current_token.ttype in (lexer.WHITESPACE, lexer.PUNCTUATION, lexer.OPERATOR):
                 if self._current_token.ttype in (lexer.OPERATOR, lexer.PUNCTUATION):
                     result.append(self._current_token.value)
