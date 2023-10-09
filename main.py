@@ -8,13 +8,13 @@ def main():
     while True:
         packed_input = []
         while True:
-            if not packed_input:
-                try:
+            try:
+                if not packed_input:
                     raw_input = str(input('>>> '))
-                except EOFError:
-                    break
-            else:
-                raw_input = str(input('...    '))
+                else:
+                    raw_input = str(input('...    '))
+            except EOFError:
+                break
 
             if ';' in raw_input:
                 raw_input = raw_input[:raw_input.index(';')]
