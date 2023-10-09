@@ -23,7 +23,7 @@ def main():
 
             packed_input.append(raw_input)
 
-        packed_input = ' '.join(packed_input)
+        packed_input = ' '.join(packed_input).strip()
         parse = Parser().parse(packed_input)
         for el in parse:
             print(el)
