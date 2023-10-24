@@ -1,10 +1,10 @@
-import re
-import os
-import FlorianDB
+from FlorianDB import Interpreter, FlorianDB
+from lexer import Lexer
 from SQLparser import Parser
 
 
 def main():
+    db = FlorianDB()
     while True:
         packed_input = []
         while True:
@@ -24,9 +24,9 @@ def main():
             packed_input.append(raw_input)
 
         packed_input = ' '.join(packed_input).strip()
-        parse = Parser().parse(packed_input)
-        for el in parse:
-            print(el)
+        lexer = Lexer(packed_input)
+        parser = Parser(lexer)
+        Interpreter(db, parser).interpret()
 
 
 if __name__ == '__main__':

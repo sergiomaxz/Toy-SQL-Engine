@@ -1,90 +1,328 @@
 import lexer
+from typing import Union
 
 P_OPEN = '('
 P_CLOSE = ')'
 
 
 class Parser:
-    def __init__(self):
-        self._tokens = None
-        self._current_token = None
+    def __init__(self, plexer: lexer.Lexer):
+        self.lexer = plexer
+        self._curr_token = self.lexer.get_next_token()
 
     def eat(self):
-        self._current_token = next(self._tokens, lexer.Token(None, 'EOF'))
+        self._curr_token = self.lexer.get_next_token()
 
-    def factor(self):
-        token = self._current_token
-        if (token.ttype, token.value) == (lexer.PARENTHESES, P_OPEN):
-            result = [token.value]
+    def _error_select(self, instead) -> dict:
+        if self._curr_token.ttype == 'EOF':
+            return {'success': False,
+                    'error': f'Invalid syntax: Unexpected {self._curr_token.ttype} instead {instead} while parsing.\n'
+                             f'Correct syntax: SELECT FROM table_name [WHERE condition]\n'
+                             f'\t\t\t\tcondition := column_name operator "value" | (condition) AND (condition) | (condition) OR (condition)\n'
+                             f'\t\t\t\toperator := ( = | < | > )\n'}
+
+        return {'success': False,
+                'error': f'Invalid syntax: Unexpected {self._curr_token.ttype}:"{self._curr_token.value}" instead {instead} while parsing.\n'
+                         f'Correct syntax: SELECT FROM table_name [WHERE condition]\n'
+                         f'\t\t\t\tcondition := column_name operator "value" | (condition) AND (condition) | (condition) OR (condition)\n'
+                         f'\t\t\t\toperator := ( = | < | > )\n'}
+
+    def _error_insert(self, instead) -> dict:
+        if self._curr_token.ttype == 'EOF':
+            return {'success': False,
+                    'error': f'Invalid syntax: Unexpected {self._curr_token.ttype} instead {instead} while parsing.\n'
+                             f'Correct syntax: INSERT [INTO] table_name ("value" [,...])\n'}
+
+        return {'success': False,
+                'error': f'Invalid syntax: Unexpected {self._curr_token.ttype}:"{self._curr_token.value}" instead {instead} while parsing.\n'
+                         f'Correct syntax: INSERT [INTO] table_name ("value" [,...])\n'}
+
+    def _error_create(self, instead) -> dict:
+        if self._curr_token.ttype == 'EOF':
+            return {'success': False,
+                    'error': f'Invalid syntax: Unexpected {self._curr_token.ttype} instead {instead} while parsing.\n'
+                             f'Correct syntax: CREATE table_name (column_name [INDEXED] [,...])\n'}
+
+        return {'success': False,
+                'error': f'Invalid syntax: Unexpected {self._curr_token.ttype}:"{self._curr_token.value}" instead {instead} while parsing.\n'
+                         f'Correct syntax: CREATE table_name (column_name [INDEXED] [,...])\n'}
+
+    def parse_create(self) -> dict:
+        """
+        Parse the sql create query that insert row into the table
+
+        :return: dict(
+            'success' (bool): Whether query syntax is valid
+            'command' (str): Function name
+            'table_name' (str): Table name
+            'col_names' (list): List of column names
+            'indexed_cols' (list): List of columns that need to be indexed
+        )
+
+        If query syntax is invalid:
+        :return: dict(
+            'success' (bool): False
+            'error' (str): Error type and description
+        )
+        """
+
+        result = {
+            'success': True,
+            'command': self._curr_token.value,
+            'table_name': '',
+            'col_names': [],
+            'indexed_cols': []
+        }
+        self.eat()
+
+        if self._curr_token.ttype != lexer.IDENTIFIER:
+            if self._curr_token.ttype == lexer.KEYWORD:
+                return {'success': False,
+                        'error': f'Name error: Forbidden to use reserved words as table names.\n'}
+            return self._error_create('<table name>')
+
+        result['table_name'] = self._curr_token.value
+        self.eat()
+
+        if (self._curr_token.ttype, self._curr_token.value) != (lexer.PARENTHESES, P_OPEN):
+            return self._error_create(f'"{P_OPEN}"')
+        self.eat()
+
+        col_names = []
+        indexed_cols = []
+
+        while self._curr_token.value != P_CLOSE:
+            if self._curr_token.ttype != lexer.IDENTIFIER:
+                if self._curr_token.ttype == lexer.KEYWORD:
+                    return {'success': False,
+                            'error': f'Name error: Forbidden to use reserved words as column names.\n'}
+                return self._error_create('<column name>')
+
+            col_names.append(self._curr_token.value)
             self.eat()
-            result.extend(self.group_general())
-            if (self._current_token.ttype, self._current_token.value) == (lexer.PARENTHESES, P_CLOSE):
-                result.append(self._current_token.value)
+
+            if self._curr_token.value.upper() == 'INDEXED':
+                indexed_cols.append(col_names[-1])
                 self.eat()
+
+            if self._curr_token.value not in [',', P_CLOSE]:
+                if self._curr_token.ttype == 'EOF':
+                    return self._error_create(f'"{P_CLOSE}"')
+                return {'success': False,
+                        'error': f'Column names error: Column name can have only one property: INDEXED.\n'}
+
+            if self._curr_token.value != P_CLOSE:
+                self.eat()
+
+            if self._curr_token.ttype == 'EOF':
+                return self._error_create(f'"{P_CLOSE}"')
+
+        self.eat()
+        if self._curr_token.ttype != 'EOF':
+            return self._error_create('EOF')
+
+        result['col_names'] = col_names
+        result['indexed_cols'] = indexed_cols
+        return result
+
+    def parse_insert(self) -> dict:
+        """
+        Parse the sql insert query that insert row into the table
+
+        :return: dict(
+            'success' (bool): Whether query syntax is valid
+            'command' (str): Function name
+            'table_name' (str): Table name
+            'col_values' (list): List of values that will be inserted to table
+        )
+
+        If query syntax is invalid:
+        :return: dict(
+            'success' (bool): False
+            'error' (str): Error type and description
+        )
+        """
+
+        result = {
+            'success': True,
+            'command': self._curr_token.value,
+            'table_name': '',
+            'col_values': []
+        }
+        self.eat()
+
+        if self._curr_token.value.upper() == 'INTO':
+            self.eat()
+
+        if self._curr_token.ttype != lexer.IDENTIFIER:
+            if self._curr_token.ttype == lexer.KEYWORD:
+                return {'success': False,
+                        'error': f'Name error: Forbidden to use reserved words as table names.\n'}
+            return self._error_insert('<table name>')
+
+        result['table_name'] = self._curr_token.value
+        self.eat()
+
+        if (self._curr_token.ttype, self._curr_token.value) != (lexer.PARENTHESES, P_OPEN):
+            return self._error_insert(f'"{P_OPEN}"')
+        self.eat()
+
+        col_values = []
+
+        while self._curr_token.value != P_CLOSE:
+            if self._curr_token.ttype not in (lexer.QUOTES, lexer.NUMBER):
+                if self._curr_token.ttype == lexer.KEYWORD:
+                    return {'success': False,
+                            'error': f'Name error: Forbidden to use reserved words as column names.\n'}
+                return self._error_insert('<column name>')
+
+            col_values.append(self._curr_token.value)
+            self.eat()
+
+            if self._curr_token.value not in [',', P_CLOSE]:
+                if self._curr_token.ttype == 'EOF':
+                    return self._error_insert(f'"{P_CLOSE}"')
+                return {'success': False,
+                        'error': f'Column names error: Column name can have only one property: INDEXED.\n'}
+
+            if self._curr_token.value != P_CLOSE:
+                self.eat()
+
+            if self._curr_token.ttype == 'EOF':
+                return self._error_insert(f'"{P_CLOSE}"')
+
+        self.eat()
+        if self._curr_token.ttype != 'EOF':
+            return self._error_insert('EOF')
+
+        result['col_values'] = col_values
+        return result
+
+    def parse_select(self) -> dict:
+        """
+        Parse the sql select query that select rows from the table
+
+        :return: dict(
+            'success' (bool): Whether query syntax is valid
+            'command' (str): Function name
+            'table_name' (str): Table name
+            'conditions' (list): List of WHERE clause conditions by which records should be filtered
+        )
+
+        If query syntax is invalid:
+        :return: dict(
+            'success' (bool): False
+            'error' (str): Error type and description
+        )
+        """
+
+        result = {
+            'success': True,
+            'command': self._curr_token.value,
+            'table_name': '',
+            'conditions': []
+        }
+        self.eat()
+
+        if self._curr_token.value.upper() != 'FROM':
+            return self._error_select('FROM')
+        self.eat()
+
+        if self._curr_token.ttype != lexer.IDENTIFIER:
+            if self._curr_token.ttype == lexer.KEYWORD:
+                return {'success': False,
+                        'error': f'Name error: Forbidden to use reserved words as table names.\n'}
+            return self._error_select('<table name>')
+
+        result['table_name'] = self._curr_token.value
+        self.eat()
+
+        if self._curr_token.ttype == 'EOF':
             return result
+
+        if self._curr_token.value.upper() != 'WHERE':
+            return self._error_select('WHERE')
+        self.eat()
+
+        conditions = self.expr()
+
+        if type(conditions) is dict:
+            return conditions
+
+        result['conditions'] = conditions
+
+        return result
+
+    def expr(self) -> Union[list, dict]:
+        result = self.term()
+
+        if type(result) is dict:
+            return result
+
+        while self._curr_token.ttype == lexer.KEYWORD and self._curr_token.value.upper() in ('OR', 'AND'):
+            result = [result, self._curr_token.value]
+            self.eat()
+
+            if self._curr_token.ttype not in (lexer.IDENTIFIER, lexer.PARENTHESES):
+                return self._error_select(f'"{P_OPEN}" | column_name')
+
+            tmp_token = self.term()
+            if type(tmp_token) is dict:
+                return tmp_token
+
+            result.append(tmp_token)
+
+        return result
+
+    def term(self) -> Union[list, dict]:
+        result = self.factor()
+
+        if type(result) is dict:
+            return result
+
+        while self._curr_token.ttype == lexer.OPERATOR:
+            result = [result, self._curr_token.value]
+            self.eat()
+
+            if self._curr_token.ttype not in (lexer.QUOTES, lexer.NUMBER):
+                return self._error_select('"value"')
+            result.append(self.factor())
+
+        if type(result) is not list:
+            return self._error_select('operator')
+
+        return result
+
+    def factor(self) -> Union[list, str, int, dict]:
+        token = self._curr_token
+        if (token.ttype, token.value) == (lexer.PARENTHESES, P_OPEN):
+            self.eat()
+            res = self.expr()
+
+            if type(res) is dict:
+                return res
+
+            if (self._curr_token.ttype, self._curr_token.value) != (lexer.PARENTHESES, P_CLOSE):
+                return self._error_select(f'"{P_CLOSE}"')
+
+            self.eat()
+            return res
+
+        elif token.ttype in (lexer.IDENTIFIER, lexer.NUMBER, lexer.QUOTES):
+            self.eat()
+            return token.value
+
         else:
-            self.eat()
-            return token
+            return self._error_select('column_name | "value"')
 
-    def term(self) -> list:
-        result = []
-        tmp_token = self.factor()
+    def parse(self) -> dict:
+        if self._curr_token.value.upper() == 'CREATE':
+            return self.parse_create()
 
-        result.append(tmp_token.value) if isinstance(tmp_token, lexer.Token) else result.append(tmp_token)
+        if self._curr_token.value.upper() == 'INSERT':
+            return self.parse_insert()
 
-        if isinstance(tmp_token, list) or tmp_token.ttype in (lexer.IDENTIFIER, lexer.QUOTES, lexer.NUMBER):
-            while self._current_token.ttype in (lexer.WHITESPACE, lexer.PUNCTUATION, lexer.OPERATOR):
-                if self._current_token.ttype in (lexer.OPERATOR, lexer.PUNCTUATION):
-                    result.append(self._current_token.value)
-                    self.eat()
-                if self._current_token.ttype == lexer.WHITESPACE:
-                    self.eat()
-                tmp_token = self.factor()
-                if isinstance(tmp_token, lexer.Token):
-                    result.append(tmp_token.value)
-                    if tmp_token.ttype == lexer.KEYWORD:
-                        break
-                else:
-                    result.append(tmp_token)
+        if self._curr_token.value.upper() == 'SELECT':
+            return self.parse_select()
 
-        return result
-
-    def group_general(self) -> list:
-        if self._current_token.ttype == lexer.WHITESPACE:
-            self.eat()
-        result = []
-        result.extend(self.term())
-
-        while self._current_token.ttype == lexer.WHITESPACE:
-            self.eat()
-            result.extend(self.term())
-
-        return result
-
-    def group_where(self):
-        result = []
-
-        if type(self._tokens) is list:
-            self._tokens = iter(self._tokens)
-
-        for gtoken in self._tokens:
-            result.append(gtoken)
-            if type(gtoken) is str and gtoken.upper() == "WHERE":
-                tmp_group = []
-                for el in self._tokens:
-                    tmp_group.append(el)
-                result.append(tmp_group)
-
-        return result
-
-    def group(self):
-        for func in [self.group_general, self.group_where]:
-            self._tokens = func()
-        return self._tokens
-
-    def parse(self, sql_statement: str) -> list:
-        tokens_stream = lexer.tokenize_sql(sql_statement)
-        self._tokens = tokens_stream
-        self._current_token = next(self._tokens)
-        parsed_query = self.group()
-        return parsed_query
+        return {'success': False, 'error': 'Error: Unknown command.\n'}
