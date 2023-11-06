@@ -15,9 +15,7 @@ SQL_REGEX = [
     (r'[a-zA-Z][a-zA-Z0-9_]*', PROCESS_AS_KEYWORD),       # sql_process_as_keyword
     (r"'(''|\\'|[^'])*'", QUOTES),                        # sql_string_single_quote
     (r'"(""|\\"|[^"])*"', QUOTES),                        # sql_string_double_quotes
-    # r"'[^']*'",                                         # sql_string_literal
     (r'-?[\d][\d.]*', NUMBER),                            # sql_number_literal
-    # r'\w[$#\w]*',                                       # process as keyword
     (r'[=<>]', OPERATOR),                                 # sql_operators
     (r'[.,;]', PUNCTUATION),                              # sql_punctuation
     (r'[()]', PARENTHESES)                                # sql_parentheses
