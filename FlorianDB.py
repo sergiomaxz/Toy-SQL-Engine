@@ -1,6 +1,7 @@
 import json
 import os
 from tabulate import tabulate
+from collections import Counter
 
 
 class FlorianDB:
@@ -15,6 +16,7 @@ class FlorianDB:
         self.db = {
             <name of the table> (dict): {
                 'col_names' (list): List of column names of the table
+                'data_types' (list): List of data type for each column
                 'data' (list): List of the rows that was inserted into the table
 
                 # then will be stored
@@ -32,6 +34,7 @@ class FlorianDB:
         # self.db = {
         #     'name': {
         #         'col_names': [],
+        #         'data_types': [],
         #         'data': [],
         #         'my_fav_food': []
         #     }
@@ -55,18 +58,26 @@ class FlorianDB:
             return False
 
     def is_table_exist(self, name):
-        if name in self.db:
-            return True
-        else:
-            return False
+        return True if name in self.db else False
+
+    @staticmethod
+    def is_column_exist(table, column_name):
+        return True if column_name in table['col_names'] else False
 
     def create_table(self, name: str, cols: list, indexed: list):
+        # check whether the table exists
         if self.is_table_exist(name):
             print(f'Error: Table {name} already exists.\n')
             return False
 
+        # check whether any of entered column names are prohibited
+        if any(['col_names', 'data_type', 'data']) in cols:
+            print(f'Error: Names \'col_names\', \'data_types\', \'data\' are prohibited to use for column names.\n')
+            return False
+
         self.db[name] = {
             'col_names': cols,
+            'data_types': [],
             'data': []
         }
 
@@ -78,13 +89,24 @@ class FlorianDB:
         return True
 
     def insert(self, name: str, values: list):
+        # check whether the table exists
         if not self.is_table_exist(name):
             print(f'Error: Table {name} doesn\'t exists.\n')
             return False
 
+        # check whether the number of columns and the number of entered values matches
         if len(self.db[name]['col_names']) != len(values):
             print("Error: Column count doesn't match value count.\n")
             return False
+
+        if not self.db[name]['data_types']:
+            self.db[name]['data_types'] = [type(value) for value in values]
+
+        # check whether the table data type and the entered data type matches
+        for ctype, value in zip(self.db[name]['data_types'], values):
+            if not isinstance(value, ctype):
+                print(f'Error: Value {value} doesn\'t match type {str(ctype)[7:-1]}.\n')
+                return False
 
         self.db[name]['data'].append(values)
 
@@ -92,28 +114,33 @@ class FlorianDB:
         return True
 
     def select(self, name: str, conds: list):
+        # check whether the table exists
         if not self.is_table_exist(name):
             print(f'Error: Table {name} doesn\'t exists.\n')
             return False
 
+        # check if there is WHERE expression
         if not conds:
             self.repr(self.db[name])
             return True
 
         res_rows = self._select(self.db[name], conds)
 
+        # if error raised
         if res_rows is False:
             return False
 
+        # display table
         self.repr(self.db[name], res_rows)
         return True
 
     def _select(self, table: dict, conds: list):
-        if type(conds[0]) is list:
+        if isinstance(conds[0], list):
             left_op = self._select(table, conds[0])
             right_op = self._select(table, conds[2])
             oper = conds[1]
 
+            # if error raised
             if left_op is False or right_op is False:
                 return False
 
@@ -122,13 +149,13 @@ class FlorianDB:
         left_op, oper, right_op = conds
         return self._filter(oper, left_op, right_op, table)
 
-
     def _filter(self, op, l_op, r_op, table=None):
         if op == 'OR':
             l_tuple = map(tuple, l_op)
             r_tuple = map(tuple, r_op)
 
-            common = list(map(list, set(l_tuple).union(set(r_tuple))))
+            # common = list(map(list, set(l_tuple).union(set(r_tuple))))
+            common = list((Counter(l_tuple) | Counter(r_tuple)).elements())
 
             return common
 
@@ -136,84 +163,79 @@ class FlorianDB:
             l_tuple = map(tuple, l_op)
             r_tuple = map(tuple, r_op)
 
-            combined = list(map(list, set(l_tuple).intersection(set(r_tuple))))
+            # combined = list(map(list, set(l_tuple).intersection(set(r_tuple))))
+            combined = list((Counter(l_tuple) & Counter(r_tuple)).elements())
 
             return combined
 
         elif op == '=':
-            if l_op in table['col_names']:
-                col_id = table['col_names'].index(l_op)
-                result = []
+            # check whether the entered column exists
+            if not self.is_column_exist(table, l_op):
+                print('Invalid syntax: one of the operands in condition must be the column name.\n')
+                return False
 
+            col_id = table['col_names'].index(l_op)
+            result = []
+
+            # check whether the value is integer
+            if isinstance(r_op, int):
                 for row in table['data']:
                     if row[col_id] == r_op:
                         result.append(row)
 
-                return result
-
-            elif r_op in table['col_names']:
-                col_id = table['col_names'].index(r_op)
-                result = []
-
+            else:
+                r_op_lower = r_op.lower()
                 for row in table['data']:
-                    if row[col_id] == l_op:
+                    if row[col_id].lower() == r_op_lower:
                         result.append(row)
 
-                return result
+            return result
 
-            else:
+        elif op == '<':
+            # check whether the entered column exists
+            if not self.is_column_exist(table, l_op):
                 print('Invalid syntax: one of the operands in condition must be the column name.\n')
                 return False
 
-        elif op == '<':
-            if l_op in table['col_names']:
-                col_id = table['col_names'].index(l_op)
-                result = []
+            col_id = table['col_names'].index(l_op)
+            result = []
 
+            # check whether the value is integer
+            if isinstance(r_op, int):
                 for row in table['data']:
                     if row[col_id] < r_op:
                         result.append(row)
 
-                return result
-
-            elif r_op in table['col_names']:
-                col_id = table['col_names'].index(r_op)
-                result = []
-
+            else:
+                r_op_lower = r_op.lower()
                 for row in table['data']:
-                    if row[col_id] < l_op:
+                    if row[col_id].lower() < r_op_lower:
                         result.append(row)
 
-                return result
+            return result
 
-            else:
+        else:
+            # check whether the entered column exists
+            if not self.is_column_exist(table, l_op):
                 print('Invalid syntax: one of the operands in condition must be the column name.\n')
                 return False
 
-        else:
-            if l_op in table['col_names']:
-                col_id = table['col_names'].index(l_op)
-                result = []
+            col_id = table['col_names'].index(l_op)
+            result = []
 
+            # check whether the value is integer
+            if isinstance(r_op, int):
                 for row in table['data']:
                     if row[col_id] > r_op:
                         result.append(row)
 
-                return result
-
-            elif r_op in table['col_names']:
-                col_id = table['col_names'].index(r_op)
-                result = []
-
+            else:
+                r_op_lower = r_op.lower()
                 for row in table['data']:
-                    if row[col_id] > l_op:
+                    if row[col_id].lower() > r_op_lower:
                         result.append(row)
 
-                return result
-
-            else:
-                print('Invalid syntax: one of the operands in condition must be the column name.\n')
-                return False
+            return result
 
     def repr(self, table: dict, data=None):
         col_names = table['col_names']
@@ -228,7 +250,7 @@ class FlorianDB:
         print(tabulate(table, headers='firstrow', tablefmt='grid'), '\n')
 
 class Interpreter:
-    def __init__(self, db: FlorianDB, parser: Parser):
+    def __init__(self, db: FlorianDB, parser):
         self.db = db
         self.parser = parser
 

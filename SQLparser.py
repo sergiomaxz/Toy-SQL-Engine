@@ -10,46 +10,35 @@ class Parser:
         self.lexer = plexer
         self._curr_token = self.lexer.get_next_token()
 
-    def eat(self):
+    def advance_to_next_token(self):
         self._curr_token = self.lexer.get_next_token()
 
     def _error_select(self, instead) -> dict:
-        if self._curr_token.ttype == 'EOF':
-            return {'success': False,
-                    'error': f'Invalid syntax: Unexpected {self._curr_token.ttype} instead {instead} while parsing.\n'
-                             f'Correct syntax: SELECT FROM table_name [WHERE condition]\n'
-                             f'\t\t\t\tcondition := column_name operator "value" | (condition) AND (condition) | (condition) OR (condition)\n'
-                             f'\t\t\t\toperator := ( = | < | > )\n'}
+        unexpected = f'{self._curr_token.ttype}' if self._curr_token.ttype == 'EOF' else f'{self._curr_token.ttype}:"{self._curr_token.value}"'
 
         return {'success': False,
-                'error': f'Invalid syntax: Unexpected {self._curr_token.ttype}:"{self._curr_token.value}" instead {instead} while parsing.\n'
+                'error': f'Invalid syntax: Unexpected {unexpected} instead {instead} while parsing.\n'
                          f'Correct syntax: SELECT FROM table_name [WHERE condition]\n'
                          f'\t\t\t\tcondition := column_name operator "value" | (condition) AND (condition) | (condition) OR (condition)\n'
                          f'\t\t\t\toperator := ( = | < | > )\n'}
 
     def _error_insert(self, instead) -> dict:
-        if self._curr_token.ttype == 'EOF':
-            return {'success': False,
-                    'error': f'Invalid syntax: Unexpected {self._curr_token.ttype} instead {instead} while parsing.\n'
-                             f'Correct syntax: INSERT [INTO] table_name ("value" [,...])\n'}
+        unexpected = f'{self._curr_token.ttype}' if self._curr_token.ttype == 'EOF' else f'{self._curr_token.ttype}:"{self._curr_token.value}"'
 
         return {'success': False,
-                'error': f'Invalid syntax: Unexpected {self._curr_token.ttype}:"{self._curr_token.value}" instead {instead} while parsing.\n'
+                'error': f'Invalid syntax: Unexpected {unexpected} instead {instead} while parsing.\n'
                          f'Correct syntax: INSERT [INTO] table_name ("value" [,...])\n'}
 
     def _error_create(self, instead) -> dict:
-        if self._curr_token.ttype == 'EOF':
-            return {'success': False,
-                    'error': f'Invalid syntax: Unexpected {self._curr_token.ttype} instead {instead} while parsing.\n'
-                             f'Correct syntax: CREATE table_name (column_name [INDEXED] [,...])\n'}
+        unexpected = f'{self._curr_token.ttype}' if self._curr_token.ttype == 'EOF' else f'{self._curr_token.ttype}:"{self._curr_token.value}"'
 
         return {'success': False,
-                'error': f'Invalid syntax: Unexpected {self._curr_token.ttype}:"{self._curr_token.value}" instead {instead} while parsing.\n'
+                'error': f'Invalid syntax: Unexpected {unexpected} instead {instead} while parsing.\n'
                          f'Correct syntax: CREATE table_name (column_name [INDEXED] [,...])\n'}
 
     def parse_create(self) -> dict:
         """
-        Parse the sql create query that insert row into the table
+        Parse the sql create query that create table in the database
 
         :return: dict(
             'success' (bool): Whether query syntax is valid
@@ -73,7 +62,7 @@ class Parser:
             'col_names': [],
             'indexed_cols': []
         }
-        self.eat()
+        self.advance_to_next_token()
 
         if self._curr_token.ttype != lexer.IDENTIFIER:
             if self._curr_token.ttype == lexer.KEYWORD:
@@ -82,11 +71,11 @@ class Parser:
             return self._error_create('<table name>')
 
         result['table_name'] = self._curr_token.value
-        self.eat()
+        self.advance_to_next_token()
 
         if (self._curr_token.ttype, self._curr_token.value) != (lexer.PARENTHESES, P_OPEN):
             return self._error_create(f'"{P_OPEN}"')
-        self.eat()
+        self.advance_to_next_token()
 
         col_names = []
         indexed_cols = []
@@ -99,11 +88,11 @@ class Parser:
                 return self._error_create('<column name>')
 
             col_names.append(self._curr_token.value)
-            self.eat()
+            self.advance_to_next_token()
 
-            if self._curr_token.value.upper() == 'INDEXED':
+            if isinstance(self._curr_token.value, str) and self._curr_token.value.upper() == 'INDEXED':
                 indexed_cols.append(col_names[-1])
-                self.eat()
+                self.advance_to_next_token()
 
             if self._curr_token.value not in [',', P_CLOSE]:
                 if self._curr_token.ttype == 'EOF':
@@ -112,12 +101,12 @@ class Parser:
                         'error': f'Column names error: Column name can have only one property: INDEXED.\n'}
 
             if self._curr_token.value != P_CLOSE:
-                self.eat()
+                self.advance_to_next_token()
 
             if self._curr_token.ttype == 'EOF':
                 return self._error_create(f'"{P_CLOSE}"')
 
-        self.eat()
+        self.advance_to_next_token()
         if self._curr_token.ttype != 'EOF':
             return self._error_create('EOF')
 
@@ -149,10 +138,10 @@ class Parser:
             'table_name': '',
             'col_values': []
         }
-        self.eat()
+        self.advance_to_next_token()
 
-        if self._curr_token.value.upper() == 'INTO':
-            self.eat()
+        if isinstance(self._curr_token.value, str) and self._curr_token.value.upper() == 'INTO':
+            self.advance_to_next_token()
 
         if self._curr_token.ttype != lexer.IDENTIFIER:
             if self._curr_token.ttype == lexer.KEYWORD:
@@ -161,11 +150,11 @@ class Parser:
             return self._error_insert('<table name>')
 
         result['table_name'] = self._curr_token.value
-        self.eat()
+        self.advance_to_next_token()
 
         if (self._curr_token.ttype, self._curr_token.value) != (lexer.PARENTHESES, P_OPEN):
             return self._error_insert(f'"{P_OPEN}"')
-        self.eat()
+        self.advance_to_next_token()
 
         col_values = []
 
@@ -177,7 +166,7 @@ class Parser:
                 return self._error_insert('<column name>')
 
             col_values.append(self._curr_token.value)
-            self.eat()
+            self.advance_to_next_token()
 
             if self._curr_token.value not in [',', P_CLOSE]:
                 if self._curr_token.ttype == 'EOF':
@@ -186,12 +175,12 @@ class Parser:
                         'error': f'Column names error: Column name can have only one property: INDEXED.\n'}
 
             if self._curr_token.value != P_CLOSE:
-                self.eat()
+                self.advance_to_next_token()
 
             if self._curr_token.ttype == 'EOF':
                 return self._error_insert(f'"{P_CLOSE}"')
 
-        self.eat()
+        self.advance_to_next_token()
         if self._curr_token.ttype != 'EOF':
             return self._error_insert('EOF')
 
@@ -222,11 +211,11 @@ class Parser:
             'table_name': '',
             'conditions': []
         }
-        self.eat()
+        self.advance_to_next_token()
 
-        if self._curr_token.value.upper() != 'FROM':
+        if not isinstance(self._curr_token.value, str) or self._curr_token.value.upper() != 'FROM':
             return self._error_select('FROM')
-        self.eat()
+        self.advance_to_next_token()
 
         if self._curr_token.ttype != lexer.IDENTIFIER:
             if self._curr_token.ttype == lexer.KEYWORD:
@@ -235,39 +224,44 @@ class Parser:
             return self._error_select('<table name>')
 
         result['table_name'] = self._curr_token.value
-        self.eat()
+        self.advance_to_next_token()
 
         if self._curr_token.ttype == 'EOF':
             return result
 
-        if self._curr_token.value.upper() != 'WHERE':
+        if not isinstance(self._curr_token.value, str) or self._curr_token.value.upper() != 'WHERE':
             return self._error_select('WHERE')
-        self.eat()
+        self.advance_to_next_token()
 
         conditions = self.expr()
 
-        if type(conditions) is dict:
+        if isinstance(conditions, dict):
             return conditions
 
         result['conditions'] = conditions
 
+        if self._curr_token.ttype != 'EOF':
+            return self._error_select('OR | AND')
+
         return result
 
     def expr(self) -> Union[list, dict]:
+        """ expr: term [(OR | AND) term]* """
+
         result = self.term()
 
-        if type(result) is dict:
+        if isinstance(result, dict):
             return result
 
         while self._curr_token.ttype == lexer.KEYWORD and self._curr_token.value.upper() in ('OR', 'AND'):
             result = [result, self._curr_token.value]
-            self.eat()
+            self.advance_to_next_token()
 
             if self._curr_token.ttype not in (lexer.IDENTIFIER, lexer.PARENTHESES):
                 return self._error_select(f'"{P_OPEN}" | column_name')
 
             tmp_token = self.term()
-            if type(tmp_token) is dict:
+            if isinstance(tmp_token, dict):
                 return tmp_token
 
             result.append(tmp_token)
@@ -275,54 +269,61 @@ class Parser:
         return result
 
     def term(self) -> Union[list, dict]:
+        """ term: factor ((= | > | <) factor)* """
+
         result = self.factor()
 
-        if type(result) is dict:
+        if isinstance(result, dict):
             return result
 
         while self._curr_token.ttype == lexer.OPERATOR:
             result = [result, self._curr_token.value]
-            self.eat()
+            self.advance_to_next_token()
 
             if self._curr_token.ttype not in (lexer.QUOTES, lexer.NUMBER):
                 return self._error_select('"value"')
             result.append(self.factor())
 
-        if type(result) is not list:
+        if not isinstance(result, list):
             return self._error_select('operator')
 
         return result
 
     def factor(self) -> Union[list, str, int, dict]:
+        """ factor: (IDENTIFIER | QUOTES | NUMBER) | LPAREN expr RPAREN """
+
         token = self._curr_token
         if (token.ttype, token.value) == (lexer.PARENTHESES, P_OPEN):
-            self.eat()
+            self.advance_to_next_token()
             res = self.expr()
 
-            if type(res) is dict:
+            if isinstance(res, dict):
                 return res
 
             if (self._curr_token.ttype, self._curr_token.value) != (lexer.PARENTHESES, P_CLOSE):
                 return self._error_select(f'"{P_CLOSE}"')
 
-            self.eat()
+            self.advance_to_next_token()
             return res
 
         elif token.ttype in (lexer.IDENTIFIER, lexer.NUMBER, lexer.QUOTES):
-            self.eat()
+            self.advance_to_next_token()
             return token.value
 
         else:
             return self._error_select('column_name | "value"')
 
     def parse(self) -> dict:
-        if self._curr_token.value.upper() == 'CREATE':
-            return self.parse_create()
+        command_handlers = {
+            'CREATE': self.parse_create,
+            'INSERT': self.parse_insert,
+            'SELECT': self.parse_select
+        }
 
-        if self._curr_token.value.upper() == 'INSERT':
-            return self.parse_insert()
+        if self._curr_token.value:
+            command = self._curr_token.value.upper()
 
-        if self._curr_token.value.upper() == 'SELECT':
-            return self.parse_select()
+            if command in command_handlers:
+                return command_handlers[command]()
 
         return {'success': False, 'error': 'Error: Unknown command.\n'}
