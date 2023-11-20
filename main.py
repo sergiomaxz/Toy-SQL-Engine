@@ -4,17 +4,16 @@ from SQLparser import Parser
 
 
 def main():
-    db = FlorianDB()
     while True:
         packed_input = []
         while True:
             try:
                 if not packed_input:
-                    raw_input = str(input('>>> '))
+                    raw_input = input('>>> ')
                 else:
-                    raw_input = str(input('...    '))
+                    raw_input = input('...    ')
             except EOFError:
-                break
+                return
 
             if ';' in raw_input:
                 raw_input = raw_input[:raw_input.index(';')]
@@ -30,4 +29,5 @@ def main():
 
 
 if __name__ == '__main__':
+    db = FlorianDB()
     main()

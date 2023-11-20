@@ -42,7 +42,7 @@ class Parser:
 
         :return: dict(
             'success' (bool): Whether query syntax is valid
-            'command' (str): Function name
+            'command' (str): Command name
             'table_name' (str): Table name
             'col_names' (list): List of column names
             'indexed_cols' (list): List of columns that need to be indexed
@@ -120,7 +120,7 @@ class Parser:
 
         :return: dict(
             'success' (bool): Whether query syntax is valid
-            'command' (str): Function name
+            'command' (str): Command name
             'table_name' (str): Table name
             'col_values' (list): List of values that will be inserted to table
         )
@@ -193,7 +193,7 @@ class Parser:
 
         :return: dict(
             'success' (bool): Whether query syntax is valid
-            'command' (str): Function name
+            'command' (str): Command name
             'table_name' (str): Table name
             'conditions' (list): List of WHERE clause conditions by which records should be filtered
         )
@@ -313,14 +313,59 @@ class Parser:
         else:
             return self._error_select('column_name | "value"')
 
+    def parse_load(self) -> dict:
+        result = {
+            'success': True,
+            'command': self._curr_token.value,
+        }
+        self.advance_to_next_token()
+
+        if self._curr_token.ttype != lexer.IDENTIFIER:
+            return {'success': False,
+                    'error': f'Invalid syntax: Unexpected {self._curr_token.ttype}:"{self._curr_token.value}" instead file_name while parsing.\n'
+                             f'Correct syntax: LOAD file_name\n'}
+
+        result['filename'] = self._curr_token.value
+
+        self.advance_to_next_token()
+        if self._curr_token.ttype != 'EOF':
+            return {'success': False,
+                    'error': f'Invalid syntax: Unexpected {self._curr_token.ttype}:"{self._curr_token.value}" instead EOF while parsing.\n'
+                             f'Correct syntax: LOAD file_name\n'}
+
+        return result
+
+    def parse_save(self) -> dict:
+        return self.parse_command('SAVE')
+
+    def parse_exit(self) -> dict:
+        return self.parse_command('EXIT')
+
+    def parse_command(self, command_name) -> dict:
+        result = {
+            'success': True,
+            'command': self._curr_token.value
+        }
+        self.advance_to_next_token()
+
+        if self._curr_token.ttype != 'EOF':
+            return {'success': False,
+                    'error': f'Invalid syntax: Unexpected {self._curr_token.ttype}:"{self._curr_token.value}" instead EOF while parsing.\n'
+                             f'Correct syntax: {command_name}\n'}
+
+        return result
+
     def parse(self) -> dict:
         command_handlers = {
             'CREATE': self.parse_create,
             'INSERT': self.parse_insert,
-            'SELECT': self.parse_select
+            'SELECT': self.parse_select,
+            'LOAD': self.parse_load,
+            'SAVE': self.parse_save,
+            'EXIT': self.parse_exit
         }
 
-        if self._curr_token.value:
+        if isinstance(self._curr_token.value, str):
             command = self._curr_token.value.upper()
 
             if command in command_handlers:
