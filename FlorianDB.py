@@ -58,7 +58,9 @@ class FlorianDB:
                 print(f'Error: Failed to load database - {e}.\n')
                 return False
 
-        ans = input('Want to create a new database? [y for yes, n for no]: ')
+        print(f'File {filename} not found.')
+
+        ans = input('Want git to create a new database? [y for yes, n for no]: ')
         while ans.lower() not in ['y', 'n']:
             print('\nInvalid input. Please enter either "y" for yes or "n" for no.')
             ans = input('Want to create a new database? [y for yes, n for no]: ')
