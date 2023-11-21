@@ -56,6 +56,7 @@ class FlorianDB:
 
             except (EOFError, FileNotFoundError, PickleError) as e:
                 print(f'Error: Failed to load database - {e}.\n')
+                return False
 
         ans = input('Want to create a new database? [y for yes, n for no]: ')
         while ans.lower() not in ['y', 'n']:
